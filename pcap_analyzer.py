@@ -1,4 +1,4 @@
-from scapy.all import rdpcap, IP, TCP, UDP, DNS, DNSQR
+from scapy.all import rdpcap, IP, TCP, DNS, DNSQR
 from collections import defaultdict
 import argparse
 
@@ -49,6 +49,7 @@ def detect_c2_traffic(packets, domains):
     c2_traffic = defaultdict(lambda: defaultdict(lambda: {"request_count": 0, "answers": []}))
 
     for packet in packets:
+        # check if packet has an dns layer and and dns question record layer (responses also include the qr)
         if packet.haslayer(DNS) and packet.haslayer(DNSQR):
             dns = packet[DNS]
             query = dns[DNSQR].qname.decode().lower().strip('.')
@@ -65,13 +66,14 @@ def detect_c2_traffic(packets, domains):
                             for i in range(dns.ancount):
                                 answer = dns.an[i]
 
-                                if answer.type == 1:  # A record
+                                # Only A records are currently processed, rest aren't analyzed further
+                                if answer.type == 1:
                                     # Switch source and destination to add it to the corresponding response
                                     c2_traffic[domain][(packet[IP].dst, packet[IP].src, query)]["answers"].append(answer.rdata)
                                 else: 
                                     c2_traffic[domain][(packet[IP].dst, packet[IP].src, query)]["answers"].append(f"Unknown type [{answer.type}]")
 
-                        # No answers included   
+                        # No answers included, could also contain other errors than "No such name"
                         else: 
                             c2_traffic[domain][(packet[IP].dst, packet[IP].src, query)]["answers"].append("No such name")
                                 
